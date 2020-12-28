@@ -2,7 +2,7 @@
 
 Software Defined Networking (SDN) consists in the ability to transform a given set of requirements into code that defines a network with all of its components and connections. Terraform is a tool for building, changing and versioning infrastructure; in other words, it's a tool for infrastructure management and automation. SDN is one of Terraform's use cases because it can manage low-level components such as compute instances, storage, and networking, as well as high-level components like DNS entries. It's like having a blueprint of your datacenter in code.
 
-In this post, we'll create an AWS VPC that spans three (3) availability zones, each containing three (3) subnets: a public subnet, a private subnet for the app layer, and another private subnet for the database layer.  We'll deploy an EC2 instance in a public subnet that'll serve as a jump box that we'll use, in order to connect through it, to an EC2 instance deployed in a private subnet. This give us ability to perform administrative tasks such as system updates on instances deployed in private subnets, in a safer way.
+In this post, we'll create an AWS VPC with three (3) subnets in one (1) availability zone: a public subnet, a private subnet for the app layer, and another private subnet for the database layer.  We'll deploy an EC2 instance in a public subnet that'll serve as a jump box that we'll use, in order to connect through it, to an EC2 instance deployed in a private subnet. This give us ability to perform administrative tasks such as system updates on instances deployed in private subnets, in a safer way.
 
 Creating a custom VPC with all of its components is one of the first things that I learned to do in the AWS Console. It soon proved to be a cumbersome task as it involved a lot of point-and-click, tedious, and manual work whenever I wanted to create, update and/or destroy every single resource. Infrastructure as code tools like Terraform not only enables us to code it once and execute it as many times as you need it, but it also takes care of state management for us.
 
@@ -22,12 +22,12 @@ Example:
 
 ```terraform
 terraform {
-	required_providers {
-		local_name = {
-			source  = "source_name"
-			version = "version_constraint"
-		}
-	}
+  required_providers {
+    local_name = {
+      source  = "source_name"
+      version = "version_constraint"
+    }
+  }
 }
 ```
 
@@ -87,7 +87,7 @@ It's time to talk about the requirements for our SDN. Most of the time we have t
 ### Explicit requirements
 
 1. The VPC should have an IPv4 CIDR block of `172.16.0.0/16` (translates to 65,356 IP addresses).
-2. One (1) public subnet and two (2) private subnets spread out in three (3) availability zones. The public subnets CIDR blocks are: `172.0.1.0/24`, `172.0.2.0/24`, `172.0.3.0/24` and the private subnets CIDR blocks are `172.0.4.0/24`, `172.0.5.0/24`, `172.0.6.0/24`.
+2. One (1) public subnet and two (2) private subnets spread out in one (1) availability zone. The public subnets CIDR blocks are: `172.0.1.0/24`, `172.0.2.0/24`, `172.0.3.0/24` and the private subnets CIDR blocks are `172.0.4.0/24`, `172.0.5.0/24`, `172.0.6.0/24`.
 3. One (1) EC2 instance must be deployed in each public subnet.
 4. One (1) EC2 instance must be deployed in each private subnet.
 5. Ability to connect to our EC2 instance (the jump box) in the public subnet via SSH.
@@ -106,13 +106,13 @@ There are also implied requirements that weren't explicitly mentioned:
 
 ### A Diagram of our Requirements
 
-They say a picture is worth a thousand words, so let's use that to our advantage and create visual representation of our requirements for one (1) availability zone. I used an AWS template from Lucid Chart to do the following diagram, feel free to grab a copy [here](https://lucid.app/lucidchart/invitations/accept/85f9ace8-c55d-420b-8a53-01a76435d4c6).
+They say a picture is worth a thousand words, so let's use that to our advantage and create visual representation of our requirements. I used an AWS template from Lucid Chart to do the following diagram, feel free to grab a copy [here](https://lucid.app/lucidchart/invitations/accept/85f9ace8-c55d-420b-8a53-01a76435d4c6).
 
-![SDN AWS Horizontal Framework](C:\Users\adriaanbd\Downloads\SDN AWS Horizontal Framework.png)
+![SDN AWS Horizontal Framework](https://dev-to-uploads.s3.amazonaws.com/i/oxrah0gcmrlfp34o1mnw.png)
 
 ## VPC
 
-Now that we're clear on what we're building, it's time to get our hands dirty. Let's start at the top with the VPC and move down gradually. To keep things simple, we'll be focused on only one (1) availability zone because once we figure that one out, we can just replicate it with some minor adjustments. A word of warning before we start: we'll be hard coding some values into our resources but we'll gradually refactor all of that stuff as we progress. This gives us the chance to introduce Terraform syntax gradually and gives us additional perspective.
+Now that we're clear on what we're building, it's time to get our hands dirty. Let's start at the top with the VPC and move down gradually. A word of caution before we start: we'll be hard coding some values into our resources but we'll gradually refactor all of that stuff as we progress. This gives us the chance to introduce Terraform syntax gradually and gives us additional perspective.
 
 Terraform does a fantastic job at providing detailed documentation, so let's check out the docs for the VPC resource [here](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc). Get comfortable with the official documentation because we're going to be looking at it a lot. By default, all VPC's and subnets must have an IPv4 [CIDR block](https://docs.netgate.com/pfsense/en/latest/network/cidr.html#where-do-cidr-numbers-come-from), which is a method for allocating IP addresses introduced in 1993 by the Internet Engineering Task Force (see [here](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing)). Thus, it's not a surprise that `aws_vpc`'s [Argument Reference](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc#argument-reference) indicates that we are required to submit a CIDR block to create a VPC.
 
@@ -358,7 +358,7 @@ There are two ways you can define your security groups in Terraform. One approac
 Since we need HTTP egress traffic in all of our instances to be able to perform updates, we'll create a general security group for this. The jump box's and private instance's SSH requirement differ in regards to the point of origin and destination, thus we need two different security groups for this. Let's also use the "description" argument to explain it.
 
 ```terraform
-# ./firewall.tf
+# ./security.tf
 
 resource "aws_security_group" "general_sg" {
   description = "HTTP egress to anywhere"
@@ -392,7 +392,7 @@ In regards to our security group rules, we have to be specific about the type of
 #### Egress rules
 
 ```terraform
-# ./firewall.tf
+# ./security.tf
 
 resource "aws_security_group_rule" "out_http" {
   type              = "egress"
@@ -429,7 +429,7 @@ resource "aws_security_group_rule" "out_http_app" {
 #### Ingress rules
 
 ```terraform
-# firewall.tf
+# security.tf
 
 resource "aws_security_group_rule" "in_ssh_bastion_from_anywhere" {
   type              = "ingress"
@@ -576,7 +576,7 @@ Let's go ahead and issue a `$ terraform apply` command. This will create an exec
 
 There's a lot to say about state management so I'll summarize the single most important thing to know: do not commit your `.tfstate` files because they will contain sensitive information like your AWS account number and any other value you used or Terraform uses to interact with the AWS API. Here's a [useful site](https://www.toptal.com/developers/gitignore) to know which files should be added to `.gitignore`.
 
-Furthermore, there are two kinds of state: local state and remote state. By default, Terraform stores state locally. When you're working alone that's kind of alright, but when you're working in a team it makes things complicated if not impossible because there's uncertainty in regards to the source of truth. With [remote state](https://www.terraform.io/docs/state/remote.html), Terraform writes state data to a remote data store, which not only means you can share it with your tea, but you're not keeping sensitive information in your computer.
+Furthermore, there are two kinds of state: local state and remote state. By default, Terraform stores state locally. When you're working alone that's kind of alright, but when you're working in a team it makes things complicated if not impossible because there's uncertainty in regards to the source of truth. With [remote state](https://www.terraform.io/docs/state/remote.html), Terraform writes state data to a remote data store, which not only means you can share it with your team, but you're not keeping sensitive information in your computer.
 
 There's a lot more to know about Terraform, but that's for another day.
 
@@ -726,7 +726,7 @@ There are a ton of people and companies pumping Terraform tools into the ecosyst
 
 # Wrap-up
 
-A link to the GitHub repository can be found here, but it does not include any of the refactoring exercises (because that's on you to pull off and consider). Plus, it isn't that *big* yet, and a flat module structure works for now.
+A link to the GitHub repository can be found [here](https://github.com/adriaanbd/tf_aws_sdn), but it does not include any of the refactoring exercises (because that's on you to pull off and consider). Plus, it isn't that *big* yet, and a flat module structure works for now.
 
 Feel free to comment, critique, ask questions or anything really.
 
