@@ -6,7 +6,7 @@ locals {
 locals {
   bash       = "chmod 400 ${local.key_file}"
   bash_ssh   = "eval `ssh-agent` ; ssh-add -k ${local.key_file}"
-  powershell = "icacls ${local.key_file} /inheritancelevel:r /grant:r adriaanbd:R"
+  powershell = "icacls ${local.key_file} /inheritancelevel:r /grant:r username:R"
   powershell_ssh = "ssh-agent ; ssh-add -k ~/.ssh/sdn_tutorial_key.pem"
 }
 
